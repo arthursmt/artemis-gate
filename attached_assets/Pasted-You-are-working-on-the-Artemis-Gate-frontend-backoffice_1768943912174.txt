@@ -1,0 +1,80 @@
+You are working on the Artemis Gate frontend (backoffice app).
+
+GOAL:
+Create the initial "Gate Home" page for backoffice users (Operations Analyst), following best UX practices for operational workflows and speed.
+
+SCOPE (IMPORTANT – DO NOT EXCEED):
+- Only frontend (client/)
+- Do NOT touch backend, ARISE, or API implementation
+- Do NOT refactor existing Inbox or Debug pages
+- You MAY add routes, components, and small shared utilities if strictly needed
+
+CONTEXT:
+- Artemis ecosystem:
+  - Hunting = field app (credit agent)
+  - ARISE = backend
+  - Gate = backoffice
+- Gate users analyze proposals coming from Hunting via ARISE
+- First operational stage is DOC_REVIEW (document & data validation)
+
+HOME PAGE OBJECTIVE:
+Provide an operational overview and fast access to proposals.
+
+The Gate Home must:
+1. Be accessible at route: /gate/home
+2. Be the default landing page after login
+3. Focus on operational clarity, not sales metrics
+
+HOME CONTENT (REQUIRED):
+A) Header
+- Title: "Gate Overview"
+- Subtitle: "Operational overview of incoming credit proposals"
+
+B) KPI / Status Cards (4 cards)
+Each card shows:
+- Stage name
+- Count of proposals in that stage
+- Short description
+- Action button ("View")
+
+Required stages:
+- DOC_REVIEW → "New proposals to review"
+- UNDER_EVAL → "Analysis in progress"
+- RISK_EVAL (or equivalent next stage) → "Sent to risk evaluation"
+- COMPLETED → "Finished reviews"
+
+Counts should be fetched using existing listProposals(stage) API.
+If API returns empty or fails, show 0 safely (no crash).
+
+C) Quick Actions
+- Button: "Go to Inbox" → /gate/inbox
+- Button: "Debug & Connectivity" → /gate/debug
+
+D) UX / Design
+- Use existing Card, Button, icons (lucide-react)
+- Match visual language of GateLayout and Inbox
+- Clean, professional, operational (no flashy charts)
+
+TECHNICAL REQUIREMENTS:
+- Use React Query for data fetching
+- Reuse listProposals(stage)
+- Handle loading and error states gracefully
+- Do NOT duplicate logic already in Inbox unless necessary
+- Keep code readable and commented
+
+FILES YOU MAY TOUCH / CREATE:
+- client/src/pages/gate/home.tsx (main page)
+- client/src/App.tsx or router config (ONLY if needed to register /gate/home)
+- Small helper components ONLY if justified
+
+DELIVERABLE:
+After finishing, output:
+1) List of files created or modified
+2) Short explanation of how to test:
+   - Which URL to open
+   - What should appear
+   - Expected behavior if API has zero proposals
+
+IMPORTANT:
+Do not over-engineer.
+This is an MVP home focused on speed, clarity, and flow visibility.

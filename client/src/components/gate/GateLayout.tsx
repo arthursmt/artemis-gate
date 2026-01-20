@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Shield, Inbox, Bug } from "lucide-react";
+import { Shield, Home, Inbox, Bug } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -26,9 +26,11 @@ interface GateLayoutProps {
 }
 
 const navItems = [
+  { path: "/gate/home", label: "Home", icon: Home },
   { path: "/gate/inbox", label: "Inbox", icon: Inbox },
   { path: "/gate/debug", label: "Debug", icon: Bug },
 ];
+
 
 export function GateLayout({ children }: GateLayoutProps) {
   const [role, setRoleState] = useState<GateRole>(getGateRole);
@@ -50,7 +52,7 @@ export function GateLayout({ children }: GateLayoutProps) {
       <div className="flex h-screen w-full">
         <Sidebar>
           <SidebarHeader className="p-4">
-            <Link href="/gate/inbox">
+            <Link href="/gate/home">
               <div className="flex items-center gap-2 cursor-pointer" data-testid="link-home">
                 <Shield className="h-6 w-6 text-primary" />
                 <span className="text-lg font-bold text-foreground">Artemis Gate</span>
