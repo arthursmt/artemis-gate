@@ -1,25 +1,17 @@
-// Core decision stages used in Gate operations
+// Core decision stages used in Gate operations - these are the ONLY valid backend stages
 export type GateStage = "DOC_REVIEW" | "RISK_REVIEW" | "APPROVED" | "REJECTED";
 export type GateRole = "OPS" | "RISK";
 
-// Extended stages that may appear in proposals from ARISE
-export type ExtendedStage = GateStage | "UNDER_EVAL" | "COMPLETED" | "ON_GOING" | "RISK_EVAL";
-
-export const GATE_STAGES: GateStage[] = ["DOC_REVIEW", "RISK_REVIEW", "APPROVED", "REJECTED"];
+// Valid backend stages - use ONLY these when calling API
+export const VALID_STAGES: GateStage[] = ["DOC_REVIEW", "RISK_REVIEW", "APPROVED", "REJECTED"];
+export const GATE_STAGES = VALID_STAGES; // Alias for backward compat
 export const GATE_ROLES: GateRole[] = ["OPS", "RISK"];
 
-// Stages shown on Home page overview
-export const HOME_STAGES: ExtendedStage[] = ["DOC_REVIEW", "UNDER_EVAL", "RISK_REVIEW", "APPROVED"];
-
-export const STAGE_LABELS: Record<string, string> = {
+export const STAGE_LABELS: Record<GateStage, string> = {
   DOC_REVIEW: "Doc Review",
   RISK_REVIEW: "Risk Review",
-  RISK_EVAL: "Risk Review",
   APPROVED: "Approved",
-  COMPLETED: "Completed",
   REJECTED: "Rejected",
-  UNDER_EVAL: "Under Evaluation",
-  ON_GOING: "On Going",
 };
 
 export function getDefaultStageForRole(role: GateRole): GateStage {
@@ -35,5 +27,5 @@ export function canRoleDecideAtStage(role: GateRole, stage: GateStage | undefine
 
 export function getStageLabel(stage: string | undefined): string {
   if (!stage) return "--";
-  return STAGE_LABELS[stage] || stage.replace(/_/g, " ");
+  return STAGE_LABELS[stage as GateStage] || stage.replace(/_/g, " ");
 }

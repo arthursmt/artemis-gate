@@ -1,0 +1,98 @@
+You are working on Artemis Gate (frontend-only). We are operating in an economical mode: do not overbuild, minimal changes, avoid touching many files.
+
+GOAL:
+Enhance the Gate Home page to (1) match the real workflow stages and (2) include a Business Performance section (monthly KPIs) similar in spirit to the Hunt app dashboard.
+
+STRICT SCOPE:
+- Frontend only (client/)
+- Do NOT modify backend or ARISE
+- Avoid refactoring Inbox/Debug pages
+- Prefer to change ONLY: client/src/pages/gate/home.tsx
+- You may add very small helper functions inside home.tsx if needed
+- If you need new API calls, implement them in the smallest possible way and reuse existing patterns
+
+CURRENT ISSUE TO FIX:
+Home currently triggers API Error 400 about invalid/missing stage parameter.
+Backend validStages are: ["DOC_REVIEW","RISK_REVIEW","APPROVED","REJECTED"].
+Do NOT call stages that backend doesn’t recognize (e.g., UNDER_EVAL if not supported).
+
+WORKFLOW MODEL (must be reflected in UI):
+- Proposals arrive from Hunt into DOC_REVIEW
+- After Ops Analyst starts working but doesn’t finish, we want “Under Evaluation / In Progress” visibility
+- When Ops Analyst approves, it moves to RISK_REVIEW
+- Completed only when Risk Analyst finishes evaluation:
+   - APPROVED or REJECTED
+
+IMPORTANT CONSTRAINT:
+Backend may not have a real stage called UNDER_EVAL.
+Therefore, compute “Under Evaluation / In Progress” as a derived metric:
+- If proposal stage == DOC_REVIEW AND proposal has evidence of being started (e.g., has any decision draft / audit trail / updatedAt != submittedAt), count it as “In Progress”
+- If we cannot reliably detect “started”, then represent “In Progress” as 0 for now but keep the card and label it as “In Progress (derived)”.
+
+HOME PAGE REQUIRED LAYOUT:
+
+SECTION 1 — Operational Workflow (cards)
+Display 4 workflow cards with counts and a “View” button:
+1) DOC_REVIEW → “New to review”
+2) IN_PROGRESS (derived from DOC_REVIEW) → “Work started, not finished”
+3) RISK_REVIEW → “Sent to risk evaluation”
+4) COMPLETED → show combined count of APPROVED + REJECTED
+
+View behavior:
+- Clicking “View” should navigate to /gate/inbox with the closest applicable stage selected.
+- Since inbox stage selector may not support APPROVED/REJECTED, use a sensible fallback:
+   - DOC_REVIEW card -> /gate/inbox (stage DOC_REVIEW)
+   - IN_PROGRESS card -> /gate/inbox (stage DOC_REVIEW) + a query param like ?focus=in_progress (optional). If that’s too invasive, skip the param.
+   - RISK_REVIEW card -> /gate/inbox (if inbox supports RISK_REVIEW; if not, still route to inbox and show message)
+   - COMPLETED card -> /gate/inbox (fallback to DOC_REVIEW) OR provide a disabled state saying “Completed proposals view coming soon”
+
+SECTION 2 — Business Performance (monthly KPIs)
+Add a second section below workflow called:
+“Business Performance”
+Subtitle: “Key indicators for this month (real-time)”
+
+KPIs to display (cards):
+- Approved this month (count + total amount)
+- New clients this month (count)
+- Total active clients (count)
+- Credit portfolio size (total outstanding)
+- Delinquency rate (percentage)
+- Optional: Disbursements this month (total amount)
+
+IMPORTANT: Backend may not yet provide these metrics.
+Implementation approach:
+- First: attempt to fetch from a single endpoint (if exists) like:
+   GET /api/gate/metrics?period=month
+- If it does not exist, do NOT break the UI. Show placeholders:
+   - “--” or 0
+   - and a small neutral note “Metrics endpoint not available yet”
+- Do NOT create fake data.
+- Use minimal request attempts and robust error handling.
+- Reuse existing formatting helpers (formatCurrency, formatValue, etc.) if available.
+
+SECTION 3 — Quick Actions
+Keep quick actions:
+- Go to Inbox
+- Debug & Connectivity
+
+UI / DESIGN:
+- Keep style consistent with existing Gate components (Card, Button, lucide icons)
+- Clean, operational, fast scanning
+- Include a refresh button that refetches all queries
+
+DATA FETCHING RULES:
+- Use React Query
+- For stage counts: only call backend with validStages: DOC_REVIEW, RISK_REVIEW, APPROVED, REJECTED
+- Normalize responses defensively (array vs {items})
+- Prevent runtime crashes
+
+DELIVERABLE:
+After implementation, output:
+1) Files modified
+2) What stage mapping you used
+3) How to test:
+   - open /gate/home
+   - confirm no 400 error
+   - confirm cards show counts (0 if none)
+   - confirm refresh works
+4) If metrics endpoint not found, show how UI degrades safely

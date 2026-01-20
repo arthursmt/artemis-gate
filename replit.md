@@ -74,8 +74,9 @@ The app consumes the following ARISE endpoints:
 
 ## Stage Types
 Centralized in `lib/stages.ts`:
-- Core stages: DOC_REVIEW, RISK_REVIEW, APPROVED, REJECTED
-- Extended stages: UNDER_EVAL, COMPLETED, ON_GOING, RISK_EVAL
+- Valid backend stages: DOC_REVIEW, RISK_REVIEW, APPROVED, REJECTED
+- Home page derives "In Progress" and "Completed" from valid stages
+- API calls only use valid stages to avoid 400 errors
 
 ## Hardening Features
 - API URL normalization (trim, validate http/https prefix)
