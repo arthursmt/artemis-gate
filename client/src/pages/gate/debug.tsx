@@ -10,7 +10,7 @@ import { getGateRole, getGateUserId } from "@/lib/gateStore";
 interface TestResult {
   success: boolean;
   message: string;
-  data?: unknown;
+  data?: Record<string, unknown>;
   error?: string;
 }
 
@@ -28,7 +28,7 @@ export default function DebugPage() {
       setHealthResult({
         success: true,
         message: "Health check passed!",
-        data,
+        data: data as unknown as Record<string, unknown>,
       });
     } catch (err) {
       const error = err instanceof ApiError ? err.message : "Unknown error";
