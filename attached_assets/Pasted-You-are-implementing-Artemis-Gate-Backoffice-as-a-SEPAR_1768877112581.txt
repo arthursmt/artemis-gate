@@ -1,0 +1,221 @@
+You are implementing “Artemis Gate” (Backoffice) as a SEPARATE Replit project: FRONTEND-ONLY web app.
+
+Context:
+- The ARISE Backend is a separate Replit project and already exists.
+- This Gate project must NOT create or modify backend code; only consume the ARISE HTTP API.
+- ARISE base domain (already deployed): https://artemis-arise--arthursmt89.replit.app
+
+Tech:
+- React + TypeScript + Vite
+- React Router
+- Minimal styling (Tailwind if present, otherwise simple CSS)
+- Must be robust to missing fields (display “--”), never crash on undefined/null.
+
+========================================
+0) ENV / API CONFIG (CRITICAL)
+========================================
+Create a single API base URL config module, e.g. src/config/api.ts:
+- export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+Do NOT silently default to localhost in production.
+If API_BASE_URL is missing/empty:
+- Show a persistent banner: “API not configured. Set VITE_API_BASE_URL in Replit Secrets/Env.”
+- Disable API-driven pages and show exact instructions.
+
+Provide a documented, working default for this specific workspace:
+- In a .env.example (or README section), instruct to set:
+  VITE_API_BASE_URL=https://artemis-arise--arthursmt89.replit.app
+
+Create an api client module, e.g. src/lib/api.ts, with:
+- listProposals(stage)
+- getProposal(proposalId)
+- submitDecision(proposalId, payload)
+All using fetch with:
+- timeout (e.g., AbortController 10s)
+- friendly error mapping
+
+All requests must send headers:
+- "Content-Type: application/json" where applicable
+- "x-gate-role": current role (OPS or RISK)
+- "x-gate-user-id": current userId
+
+If fetch fails (network/CORS):
+- Show a friendly error:
+  “Cannot reach ARISE API. Check VITE_API_BASE_URL and ARISE CORS.”
+- Include the current API_BASE_URL value in small text for debugging.
+
+If POST returns 409 stage mismatch:
+- show toast “Stage changed. Refreshing…”
+- automatically refetch proposal and update UI.
+
+========================================
+1) ROUTES / PAGES
+========================================
+Create routes:
+- /gate/inbox
+- /gate/proposals/:proposalId
+- /gate/debug (a simple connectivity debug page)
+
+Shared Gate layout:
+- Header title: “Artemis Gate”
+- Role selector (OPS / RISK) stored in localStorage key: gateRole
+- Stable userId stored in localStorage key: gateUserId
+  - Generate on first load (UUID) and persist
+- Show role badge in header
+
+Default stage filter:
+- OPS => DOC_REVIEW
+- RISK => RISK_REVIEW
+
+========================================
+2) BACKEND API CONSUMPTION (DO NOT IMPLEMENT BACKEND)
+========================================
+Assume ARISE provides:
+
+- GET {API_BASE_URL}/api/health
+  returns { status: "ok", service: string }
+
+- GET {API_BASE_URL}/api/gate/proposals?stage=DOC_REVIEW|RISK_REVIEW|APPROVED|REJECTED
+  returns array:
+  {
+    proposalId,
+    groupId,
+    leaderName,
+    membersCount,
+    totalAmount,
+    submittedAt,
+    stage,
+    evidenceRequiredCount,
+    evidenceCompletedCount,
+    assignedTo?
+  }
+
+- GET {API_BASE_URL}/api/gate/proposals/:proposalId
+  returns:
+  {
+    proposalId,
+    groupId?,
+    stage,
+    submittedAt,
+    payload,
+    decisions[]
+  }
+
+- POST {API_BASE_URL}/api/gate/proposals/:proposalId/decision
+  body:
+    { stage, decision, reasons, comment, userId }
+  rules:
+    - decision is APPROVE or REJECT
+    - reasons is string[]
+    - comment required when decision is REJECT
+
+========================================
+3) DEBUG PAGE (/gate/debug) — MUST EXIST
+========================================
+Create a simple page that helps validate connectivity:
+- Shows current API_BASE_URL
+- Shows current role and userId
+- Button “Test /api/health”
+  - calls GET {API_BASE_URL}/api/health
+  - displays raw JSON response or a friendly error
+- Button “Test list proposals”
+  - calls GET {API_BASE_URL}/api/gate/proposals?stage=DOC_REVIEW
+  - displays count and first item summary
+
+This page is used to validate VITE_API_BASE_URL is connected.
+
+========================================
+4) INBOX UI (/gate/inbox)
+========================================
+Header:
+- Role badge + selector
+- Stage filter dropdown (default depends on role)
+
+Table columns:
+- Group ID
+- Leader
+- Members
+- Total Amount
+- Submitted (formatted)
+- Evidence “completed/required”
+- Stage badge
+- Action: “Open” -> /gate/proposals/:proposalId
+
+Sorting:
+- Newest submitted first (client-side defensive sort)
+
+========================================
+5) PROPOSAL DETAILS (/gate/proposals/:proposalId)
+========================================
+Top:
+- Group ID, stage badge, submitted date
+
+Layout (3-panel):
+- Left: member list/tabs (leader first if detectable)
+- Main: selected member summary:
+  - Loan Details
+  - Personal Data
+  - Business Data
+  - Financials
+- Right: Evidence gallery for selected member
+  Required evidence keys:
+    clientSelfie, idFront, idBack, businessProofOfAddress, businessPhoto
+  Plus any conditional evidence present in payload.
+  Thumbnails; click opens a lightbox modal.
+
+Contract section:
+- If contract exists in payload:
+  - show contract metadata
+  - list member signatures (name + signedAt)
+  - show signature image previews
+
+Audit trail:
+- decisions timeline/table:
+  { stage, decision, reasons, comment, userId, decidedAt }
+
+========================================
+6) DECISION PANEL (MVP)
+========================================
+Bottom of details:
+- Decision: Approve / Reject
+- Reasons multi-select (role-specific)
+- Comment textbox (required when Reject)
+- Button “Confirm decision”
+- Confirmation modal
+
+Role gating:
+- OPS can submit only when proposal.stage == DOC_REVIEW
+- RISK can submit only when proposal.stage == RISK_REVIEW
+- Otherwise show read-only message and disable controls
+
+After decision:
+- success toast + navigate back to /gate/inbox
+- inbox refetch
+
+========================================
+7) ROBUST DATA SELECTORS (VERY IMPORTANT)
+========================================
+Payload may vary. Implement centralized selectors that:
+- Prefer normalized structures if present (payload.members[], payload.evidence[], payload.contract/signatures).
+- Otherwise fallback to common paths heuristics:
+  payload.group.members, payload.members, payload.clients, etc.
+- Detect leader via isLeader or leaderId or leader fields.
+- Extract evidence from:
+  payload.evidence, payload.members[i].evidence, payload.documents, etc.
+- Extract signatures from:
+  payload.contract.signatures, payload.signatures, payload.members[i].signature
+- Always return safe defaults and display “--” when missing.
+- Never crash due to undefined/null
+
+========================================
+8) ACCEPTANCE
+========================================
+- /gate/debug successfully hits /api/health and displays JSON
+- Inbox loads proposals from ARISE
+- Details renders member data, evidence thumbnails, signature previews
+- OPS decision works at DOC_REVIEW, RISK at RISK_REVIEW
+- Decision history displays
+- Clear banner/error when API misconfigured or unreachable
+Deliver working code (not pseudo-code) and include short instructions:
+- Where to set VITE_API_BASE_URL in Replit
+- How to validate using /gate/debug
