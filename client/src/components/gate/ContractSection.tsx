@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { FileSignature, CheckCircle, Clock, ExternalLink } from "lucide-react";
+import { FileSignature, CheckCircle, Clock, ExternalLink, ImageOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Contract, ContractSignature } from "@/types/gate";
 import { formatDate, formatValue } from "@/lib/selectors";
+import { analyzeImageUrl } from "@/lib/imageUtils";
 
 interface ContractSectionProps {
   contract: Contract | undefined;
@@ -116,6 +116,7 @@ interface SignatureRowProps {
 
 function SignatureRow({ signature, onViewSignature }: SignatureRowProps) {
   const isSigned = !!signature.signedAt;
+  const imageInfo = analyzeImageUrl(signature.signatureUrl);
 
   return (
     <div className="flex items-center justify-between p-2 rounded-md bg-muted/50" data-testid={`signature-${signature.memberId || signature.name}`}>
@@ -135,17 +136,23 @@ function SignatureRow({ signature, onViewSignature }: SignatureRowProps) {
         </div>
       </div>
       {signature.signatureUrl && (
-        <button
-          onClick={() => onViewSignature(signature.signatureUrl!)}
-          className="w-16 h-8 border rounded bg-white overflow-hidden hover:ring-2 ring-primary transition-all"
-          data-testid={`button-view-signature-${signature.memberId || signature.name || "unknown"}`}
-        >
-          <img
-            src={signature.signatureUrl}
-            alt="Signature preview"
-            className="w-full h-full object-contain"
-          />
-        </button>
+        imageInfo.canRender && imageInfo.url ? (
+          <button
+            onClick={() => onViewSignature(imageInfo.url!)}
+            className="w-16 h-8 border rounded bg-white overflow-hidden hover:ring-2 ring-primary transition-all"
+            data-testid={`button-view-signature-${signature.memberId || signature.name || "unknown"}`}
+          >
+            <img
+              src={imageInfo.url}
+              alt="Signature preview"
+              className="w-full h-full object-contain"
+            />
+          </button>
+        ) : imageInfo.isLargeBase64 ? (
+          <div className="w-16 h-8 border rounded bg-muted flex items-center justify-center" title="Embedded image (base64). Preview disabled for performance.">
+            <ImageOff className="h-4 w-4 text-muted-foreground" />
+          </div>
+        ) : null
       )}
     </div>
   );

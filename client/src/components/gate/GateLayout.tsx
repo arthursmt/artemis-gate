@@ -16,8 +16,10 @@ import {
 } from "@/components/ui/sidebar";
 import { RoleSelector } from "./RoleSelector";
 import { ApiNotConfiguredBanner } from "./ApiNotConfiguredBanner";
+import { ApiStatusIndicator } from "./ApiStatusIndicator";
 import { isApiConfigured } from "@/config/api";
-import { getGateRole, setGateRole, getGateUserId, type GateRole } from "@/lib/gateStore";
+import { getGateRole, setGateRole, getGateUserId } from "@/lib/gateStore";
+import { type GateRole } from "@/lib/stages";
 
 interface GateLayoutProps {
   children: React.ReactNode;
@@ -99,6 +101,7 @@ export function GateLayout({ children }: GateLayoutProps) {
           <header className="flex items-center gap-4 p-4 border-b bg-card shrink-0">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <div className="flex-1" />
+            <ApiStatusIndicator />
             <div className="sm:hidden">
               <RoleSelector role={role} onRoleChange={setRoleState} />
             </div>

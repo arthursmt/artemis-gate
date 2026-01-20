@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { CheckCircle, XCircle, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,40 +8,67 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getGateRole, getGateUserId } from "@/lib/gateStore";
+import { canRoleDecideAtStage, type GateStage } from "@/lib/stages";
 import { OPS_REJECTION_REASONS, RISK_REJECTION_REASONS } from "@/types/gate";
 import type { DecisionPayload } from "@/types/gate";
 
 interface DecisionPanelProps {
   proposalId: string;
-  currentStage: string | undefined;
+  currentStage: GateStage | string | undefined;
   onSubmit: (payload: DecisionPayload) => Promise<void>;
   isSubmitting: boolean;
+}
+
+interface ValidationErrors {
+  comment?: string;
+  reasons?: string;
 }
 
 export function DecisionPanel({ proposalId, currentStage, onSubmit, isSubmitting }: DecisionPanelProps) {
   const role = getGateRole();
   const userId = getGateUserId();
 
-  const canDecide =
-    (role === "OPS" && currentStage === "DOC_REVIEW") ||
-    (role === "RISK" && currentStage === "RISK_REVIEW");
+  const canDecide = canRoleDecideAtStage(role, currentStage as GateStage);
 
   const [decision, setDecision] = useState<"APPROVE" | "REJECT" | null>(null);
   const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
   const [comment, setComment] = useState("");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [touched, setTouched] = useState<{ comment: boolean; reasons: boolean }>({ comment: false, reasons: false });
 
   const reasons = role === "OPS" ? OPS_REJECTION_REASONS : RISK_REJECTION_REASONS;
 
+  const validationErrors = useMemo((): ValidationErrors => {
+    const errors: ValidationErrors = {};
+    
+    if (decision === "REJECT") {
+      if (!comment.trim()) {
+        errors.comment = "Comment is required for rejection";
+      } else if (comment.trim().length < 10) {
+        errors.comment = "Comment must be at least 10 characters";
+      }
+      
+      if (selectedReasons.length === 0) {
+        errors.reasons = "At least one rejection reason is required";
+      }
+    }
+    
+    return errors;
+  }, [decision, comment, selectedReasons]);
+
+  const isValid = decision !== null && Object.keys(validationErrors).length === 0;
+
   const toggleReason = (reason: string) => {
+    setTouched((prev) => ({ ...prev, reasons: true }));
     setSelectedReasons((prev) =>
       prev.includes(reason) ? prev.filter((r) => r !== reason) : [...prev, reason]
     );
   };
 
-  const isValid =
-    decision !== null &&
-    (decision === "APPROVE" || (decision === "REJECT" && comment.trim().length > 0));
+  const handleCommentChange = (value: string) => {
+    setComment(value);
+    setTouched((prev) => ({ ...prev, comment: true }));
+  };
 
   const handleSubmit = async () => {
     if (!decision || !currentStage) return;
@@ -58,6 +85,7 @@ export function DecisionPanel({ proposalId, currentStage, onSubmit, isSubmitting
   };
 
   const openConfirmModal = () => {
+    setTouched({ comment: true, reasons: true });
     if (isValid) {
       setShowConfirmModal(true);
     }
@@ -116,22 +144,31 @@ export function DecisionPanel({ proposalId, currentStage, onSubmit, isSubmitting
 
           {decision === "REJECT" && (
             <div className="space-y-3">
-              <Label>Rejection Reasons (optional)</Label>
-              <div className="grid grid-cols-1 gap-2">
-                {reasons.map((reason) => (
-                  <div key={reason} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={reason}
-                      checked={selectedReasons.includes(reason)}
-                      onCheckedChange={() => toggleReason(reason)}
-                      disabled={isSubmitting}
-                      data-testid={`checkbox-reason-${reason.slice(0, 20)}`}
-                    />
-                    <label htmlFor={reason} className="text-sm cursor-pointer">
-                      {reason}
-                    </label>
-                  </div>
-                ))}
+              <div className="space-y-2">
+                <Label>
+                  Rejection Reasons <span className="text-destructive">*</span>
+                </Label>
+                <div className="grid grid-cols-1 gap-2">
+                  {reasons.map((reason) => (
+                    <div key={reason} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={reason}
+                        checked={selectedReasons.includes(reason)}
+                        onCheckedChange={() => toggleReason(reason)}
+                        disabled={isSubmitting}
+                        data-testid={`checkbox-reason-${reason.slice(0, 20)}`}
+                      />
+                      <label htmlFor={reason} className="text-sm cursor-pointer">
+                        {reason}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                {touched.reasons && validationErrors.reasons && (
+                  <p className="text-xs text-destructive" data-testid="error-reasons">
+                    {validationErrors.reasons}
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -139,22 +176,33 @@ export function DecisionPanel({ proposalId, currentStage, onSubmit, isSubmitting
           <div className="space-y-2">
             <Label htmlFor="comment">
               Comment {decision === "REJECT" && <span className="text-destructive">*</span>}
+              {decision === "REJECT" && <span className="text-xs text-muted-foreground ml-1">(min 10 characters)</span>}
             </Label>
             <Textarea
               id="comment"
               value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder={decision === "REJECT" ? "Required: explain rejection reason..." : "Optional comment..."}
+              onChange={(e) => handleCommentChange(e.target.value)}
+              placeholder={decision === "REJECT" ? "Required: explain rejection reason (min 10 chars)..." : "Optional comment..."}
               disabled={isSubmitting}
               rows={3}
               data-testid="textarea-comment"
             />
+            {touched.comment && validationErrors.comment && (
+              <p className="text-xs text-destructive" data-testid="error-comment">
+                {validationErrors.comment}
+              </p>
+            )}
+            {decision === "REJECT" && comment.length > 0 && comment.length < 10 && (
+              <p className="text-xs text-muted-foreground">
+                {10 - comment.length} more character{10 - comment.length !== 1 ? "s" : ""} needed
+              </p>
+            )}
           </div>
 
           <Button
             className="w-full"
             onClick={openConfirmModal}
-            disabled={!isValid || isSubmitting}
+            disabled={!decision || isSubmitting}
             data-testid="button-confirm-decision"
           >
             {isSubmitting ? (

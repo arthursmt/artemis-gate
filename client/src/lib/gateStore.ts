@@ -1,7 +1,9 @@
+import { type GateRole, getDefaultStageForRole } from "./stages";
+
 const ROLE_KEY = "gateRole";
 const USER_ID_KEY = "gateUserId";
 
-export type GateRole = "OPS" | "RISK";
+export type { GateRole };
 
 export function getGateRole(): GateRole {
   const stored = localStorage.getItem(ROLE_KEY);
@@ -25,5 +27,5 @@ export function getGateUserId(): string {
 }
 
 export function getDefaultStage(role: GateRole): string {
-  return role === "OPS" ? "DOC_REVIEW" : "RISK_REVIEW";
+  return getDefaultStageForRole(role);
 }

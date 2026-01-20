@@ -10,11 +10,10 @@ import { GateLayout } from "@/components/gate/GateLayout";
 import { StageBadge } from "@/components/gate/StageBadge";
 import { isApiConfigured } from "@/config/api";
 import { listProposals } from "@/lib/api";
-import { getGateRole, getDefaultStage, type GateRole } from "@/lib/gateStore";
+import { getGateRole, getDefaultStage } from "@/lib/gateStore";
+import { type GateRole, type GateStage, GATE_STAGES, STAGE_LABELS } from "@/lib/stages";
 import { formatDate, formatCurrency, formatValue } from "@/lib/selectors";
 import type { ProposalSummary } from "@/types/gate";
-
-const STAGES = ["DOC_REVIEW", "RISK_REVIEW", "APPROVED", "REJECTED"];
 
 export default function InboxPage() {
   const [role, setRole] = useState<GateRole>(getGateRole);
@@ -72,9 +71,9 @@ export default function InboxPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {STAGES.map((s) => (
+                {GATE_STAGES.map((s) => (
                   <SelectItem key={s} value={s} data-testid={`select-item-stage-${s.toLowerCase()}`}>
-                    {s.replace("_", " ")}
+                    {STAGE_LABELS[s]}
                   </SelectItem>
                 ))}
               </SelectContent>

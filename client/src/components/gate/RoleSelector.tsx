@@ -1,6 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { type GateRole } from "@/lib/gateStore";
+import { type GateRole, GATE_ROLES } from "@/lib/stages";
 
 interface RoleSelectorProps {
   role: GateRole;
@@ -15,8 +15,11 @@ export function RoleSelector({ role, onRoleChange }: RoleSelectorProps) {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="OPS" data-testid="select-item-ops">OPS</SelectItem>
-          <SelectItem value="RISK" data-testid="select-item-risk">RISK</SelectItem>
+          {GATE_ROLES.map((r) => (
+            <SelectItem key={r} value={r} data-testid={`select-item-${r.toLowerCase()}`}>
+              {r}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
       <RoleBadge role={role} />

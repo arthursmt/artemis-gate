@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Image, X, ExternalLink } from "lucide-react";
+import { Image, ExternalLink, ImageOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EVIDENCE_KEYS } from "@/types/gate";
+import { analyzeImageUrl } from "@/lib/imageUtils";
 
 interface EvidenceGalleryProps {
   evidence: Record<string, string>;
@@ -27,11 +28,16 @@ export function EvidenceGallery({ evidence, title = "Evidence" }: EvidenceGaller
   const [lightboxLabel, setLightboxLabel] = useState<string>("");
 
   const allKeys = new Set([...EVIDENCE_KEYS, ...Object.keys(evidence)]);
-  const evidenceEntries = Array.from(allKeys).map((key) => ({
-    key,
-    url: evidence[key],
-    label: getLabel(key),
-  }));
+  const evidenceEntries = Array.from(allKeys).map((key) => {
+    const rawUrl = evidence[key];
+    const imageInfo = analyzeImageUrl(rawUrl);
+    return {
+      key,
+      rawUrl,
+      imageInfo,
+      label: getLabel(key),
+    };
+  });
 
   const openLightbox = (url: string, label: string) => {
     setLightboxUrl(url);
@@ -54,19 +60,19 @@ export function EvidenceGallery({ evidence, title = "Evidence" }: EvidenceGaller
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-2">
-            {evidenceEntries.map(({ key, url, label }) => (
+            {evidenceEntries.map(({ key, imageInfo, label }) => (
               <div
                 key={key}
                 className="aspect-square rounded-md border bg-muted overflow-hidden relative group"
                 data-testid={`evidence-${key}`}
               >
-                {url ? (
+                {imageInfo.canRender && imageInfo.url ? (
                   <>
                     <img
-                      src={url}
+                      src={imageInfo.url}
                       alt={label}
                       className="w-full h-full object-cover cursor-pointer"
-                      onClick={() => openLightbox(url, label)}
+                      onClick={() => openLightbox(imageInfo.url!, label)}
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
                         e.currentTarget.nextElementSibling?.classList.remove("hidden");
@@ -79,13 +85,23 @@ export function EvidenceGallery({ evidence, title = "Evidence" }: EvidenceGaller
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => openLightbox(url, label)}
+                        onClick={() => openLightbox(imageInfo.url!, label)}
                         data-testid={`button-view-${key}`}
                       >
                         View
                       </Button>
                     </div>
                   </>
+                ) : imageInfo.isLargeBase64 ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-2 bg-muted">
+                    <ImageOff className="h-6 w-6 text-muted-foreground mb-1" />
+                    <span className="text-xs text-muted-foreground text-center leading-tight">
+                      Embedded image (base64)
+                    </span>
+                    <span className="text-xs text-muted-foreground text-center leading-tight">
+                      Preview disabled
+                    </span>
+                  </div>
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <span className="text-xs text-muted-foreground text-center px-1">

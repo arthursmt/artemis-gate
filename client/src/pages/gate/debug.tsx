@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Activity, Server, FileText, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Activity, Server, FileText, CheckCircle, XCircle, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { GateLayout } from "@/components/gate/GateLayout";
-import { API_BASE_URL, isApiConfigured } from "@/config/api";
+import { API_BASE_URL, isApiConfigured, getApiConfigError } from "@/config/api";
 import { checkHealth, listProposals, ApiError } from "@/lib/api";
 import { getGateRole, getGateUserId } from "@/lib/gateStore";
 
@@ -12,6 +13,23 @@ interface TestResult {
   message: string;
   data?: Record<string, unknown>;
   error?: string;
+  errorName?: string;
+  isCorsLikely?: boolean;
+}
+
+function detectCorsError(error: unknown): { errorName: string; isCorsLikely: boolean } {
+  if (error instanceof TypeError) {
+    const message = error.message.toLowerCase();
+    const isCors = message.includes("fetch") || message.includes("network") || message.includes("cors");
+    return { errorName: "TypeError", isCorsLikely: isCors };
+  }
+  if (error instanceof Error) {
+    if (error.name === "AbortError") {
+      return { errorName: "AbortError", isCorsLikely: false };
+    }
+    return { errorName: error.name, isCorsLikely: false };
+  }
+  return { errorName: "Unknown", isCorsLikely: false };
 }
 
 export default function DebugPage() {
@@ -31,11 +49,14 @@ export default function DebugPage() {
         data: data as unknown as Record<string, unknown>,
       });
     } catch (err) {
-      const error = err instanceof ApiError ? err.message : "Unknown error";
+      const { errorName, isCorsLikely } = detectCorsError(err);
+      const errorMessage = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Unknown error";
       setHealthResult({
         success: false,
         message: "Health check failed",
-        error,
+        error: errorMessage,
+        errorName,
+        isCorsLikely,
       });
     } finally {
       setLoadingHealth(false);
@@ -60,16 +81,21 @@ export default function DebugPage() {
         } : { count: 0 },
       });
     } catch (err) {
-      const error = err instanceof ApiError ? err.message : "Unknown error";
+      const { errorName, isCorsLikely } = detectCorsError(err);
+      const errorMessage = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Unknown error";
       setProposalsResult({
         success: false,
         message: "Failed to list proposals",
-        error,
+        error: errorMessage,
+        errorName,
+        isCorsLikely,
       });
     } finally {
       setLoadingProposals(false);
     }
   }
+
+  const configError = getApiConfigError();
 
   return (
     <GateLayout>
@@ -93,7 +119,7 @@ export default function DebugPage() {
             <div className="grid gap-3 text-sm">
               <div className="flex justify-between items-center py-2 border-b">
                 <span className="text-muted-foreground">API Base URL</span>
-                <code className="bg-muted px-2 py-1 rounded text-xs font-mono" data-testid="text-api-url">
+                <code className="bg-muted px-2 py-1 rounded text-xs font-mono max-w-xs truncate" data-testid="text-api-url">
                   {API_BASE_URL || "(not set)"}
                 </code>
               </div>
@@ -107,6 +133,15 @@ export default function DebugPage() {
                   )}
                 </span>
               </div>
+              {configError && (
+                <div className="py-2 border-b">
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Configuration Error</AlertTitle>
+                    <AlertDescription data-testid="text-config-error">{configError}</AlertDescription>
+                  </Alert>
+                </div>
+              )}
               <div className="flex justify-between items-center py-2 border-b">
                 <span className="text-muted-foreground">Current Role</span>
                 <code className="bg-muted px-2 py-1 rounded text-xs font-mono" data-testid="text-role">
@@ -148,28 +183,7 @@ export default function DebugPage() {
             </Button>
 
             {healthResult && (
-              <div className={`p-4 rounded-md ${healthResult.success ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"}`}>
-                <div className="flex items-center gap-2 mb-2">
-                  {healthResult.success ? (
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                  ) : (
-                    <XCircle className="h-5 w-5 text-red-600" />
-                  )}
-                  <span className={`font-medium ${healthResult.success ? "text-green-800 dark:text-green-200" : "text-red-800 dark:text-red-200"}`} data-testid="text-health-message">
-                    {healthResult.message}
-                  </span>
-                </div>
-                {healthResult.data && (
-                  <pre className="text-xs bg-card p-2 rounded mt-2 overflow-auto" data-testid="text-health-data">
-                    {JSON.stringify(healthResult.data, null, 2)}
-                  </pre>
-                )}
-                {healthResult.error && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-2" data-testid="text-health-error">
-                    {healthResult.error}
-                  </p>
-                )}
-              </div>
+              <TestResultDisplay result={healthResult} />
             )}
           </CardContent>
         </Card>
@@ -200,32 +214,65 @@ export default function DebugPage() {
             </Button>
 
             {proposalsResult && (
-              <div className={`p-4 rounded-md ${proposalsResult.success ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"}`}>
-                <div className="flex items-center gap-2 mb-2">
-                  {proposalsResult.success ? (
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                  ) : (
-                    <XCircle className="h-5 w-5 text-red-600" />
-                  )}
-                  <span className={`font-medium ${proposalsResult.success ? "text-green-800 dark:text-green-200" : "text-red-800 dark:text-red-200"}`} data-testid="text-proposals-message">
-                    {proposalsResult.message}
-                  </span>
-                </div>
-                {proposalsResult.data && (
-                  <pre className="text-xs bg-card p-2 rounded mt-2 overflow-auto" data-testid="text-proposals-data">
-                    {JSON.stringify(proposalsResult.data, null, 2)}
-                  </pre>
-                )}
-                {proposalsResult.error && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-2" data-testid="text-proposals-error">
-                    {proposalsResult.error}
-                  </p>
-                )}
-              </div>
+              <TestResultDisplay result={proposalsResult} />
             )}
           </CardContent>
         </Card>
       </div>
     </GateLayout>
+  );
+}
+
+interface TestResultDisplayProps {
+  result: TestResult;
+}
+
+function TestResultDisplay({ result }: TestResultDisplayProps) {
+  return (
+    <div className={`p-4 rounded-md ${result.success ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"}`}>
+      <div className="flex items-center gap-2 mb-2">
+        {result.success ? (
+          <CheckCircle className="h-5 w-5 text-green-600" />
+        ) : (
+          <XCircle className="h-5 w-5 text-red-600" />
+        )}
+        <span className={`font-medium ${result.success ? "text-green-800 dark:text-green-200" : "text-red-800 dark:text-red-200"}`} data-testid="text-result-message">
+          {result.message}
+        </span>
+      </div>
+      
+      {result.data && (
+        <pre className="text-xs bg-card p-2 rounded mt-2 overflow-auto" data-testid="text-result-data">
+          {JSON.stringify(result.data, null, 2)}
+        </pre>
+      )}
+      
+      {result.error && (
+        <div className="mt-3 space-y-2">
+          {result.errorName && (
+            <p className="text-xs text-red-600 dark:text-red-400" data-testid="text-error-name">
+              <strong>Error Type:</strong> {result.errorName}
+            </p>
+          )}
+          <p className="text-xs text-red-600 dark:text-red-400" data-testid="text-error-message">
+            <strong>Error:</strong> {result.error}
+          </p>
+          <p className="text-xs text-muted-foreground" data-testid="text-api-url-debug">
+            <strong>API URL:</strong> {API_BASE_URL || "(not set)"}
+          </p>
+          
+          {result.isCorsLikely && (
+            <Alert className="mt-3">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>CORS Error Likely</AlertTitle>
+              <AlertDescription className="text-xs" data-testid="text-cors-hint">
+                If this is a CORS error, ARISE must allow the Gate domain in its CORS config.
+                The ARISE backend needs to include the appropriate Access-Control-Allow-Origin header.
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
