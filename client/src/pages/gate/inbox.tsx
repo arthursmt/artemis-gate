@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState, Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -7,6 +7,9 @@ import {
   ArrowRight,
   Loader2,
   RefreshCw,
+  Eye,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -33,29 +36,106 @@ import { StageBadge } from "@/components/gate/StageBadge";
 import { isApiConfigured } from "@/config/api";
 import { listProposals } from "@/lib/api";
 import { getGateRole, getDefaultStage } from "@/lib/gateStore";
-import {
-  type GateRole,
-  GATE_STAGES,
-  STAGE_LABELS,
-} from "@/lib/stages";
+import { type GateRole, GATE_STAGES, STAGE_LABELS } from "@/lib/stages";
 
-import {
-  formatDate,
-  formatCurrency,
-  formatValue,
-} from "@/lib/selectors";
-
+import { formatDate, formatCurrency, formatValue } from "@/lib/selectors";
 import type { ProposalSummary } from "@/types/gate";
+
+type SortKey = "OLDEST" | "NEWEST" | "AMOUNT_DESC" | "AMOUNT_ASC";
+
+type UiProposal = ProposalSummary & {
+  _isMock?: boolean;
+  _preview?: {
+    leaderPhone?: string;
+    address?: string;
+    notes?: string;
+  };
+};
+
+function makeMockProposals(): UiProposal[] {
+  const now = Date.now();
+  const daysAgo = (d: number) => new Date(now - d * 24 * 60 * 60 * 1000).toISOString();
+
+  return [
+    {
+      proposalId: "mock-0001",
+      groupId: "GRP-10293",
+      leaderName: "Maria Santos",
+      membersCount: 5,
+      totalAmount: 1200,
+      submittedAt: daysAgo(12),
+      evidenceCompletedCount: 2,
+      evidenceRequiredCount: 4,
+      stage: "DOC_REVIEW" as any,
+      _isMock: true,
+      _preview: {
+        leaderPhone: "+258 84 123 4567",
+        address: "Matola, Maputo (sample)",
+        notes: "Missing 2 docs. ID photo blurry.",
+      },
+    },
+    {
+      proposalId: "mock-0002",
+      groupId: "GRP-10401",
+      leaderName: "João Manuel",
+      membersCount: 3,
+      totalAmount: 650,
+      submittedAt: daysAgo(9),
+      evidenceCompletedCount: 4,
+      evidenceRequiredCount: 4,
+      stage: "DOC_REVIEW" as any,
+      _isMock: true,
+      _preview: {
+        leaderPhone: "+258 87 555 0101",
+        address: "Beira, Sofala (sample)",
+        notes: "All docs present. Validate member IDs.",
+      },
+    },
+    {
+      proposalId: "mock-0003",
+      groupId: "GRP-11002",
+      leaderName: "Ana Chissano",
+      membersCount: 7,
+      totalAmount: 2100,
+      submittedAt: daysAgo(4),
+      evidenceCompletedCount: 1,
+      evidenceRequiredCount: 4,
+      stage: "DOC_REVIEW" as any,
+      _isMock: true,
+      _preview: {
+        leaderPhone: "+258 82 900 7788",
+        address: "Nampula (sample)",
+        notes: "Only 1 evidence uploaded so far.",
+      },
+    },
+    {
+      proposalId: "mock-0004",
+      groupId: "GRP-11220",
+      leaderName: "Carlos Mavota",
+      membersCount: 4,
+      totalAmount: 980,
+      submittedAt: daysAgo(1),
+      evidenceCompletedCount: 3,
+      evidenceRequiredCount: 4,
+      stage: "DOC_REVIEW" as any,
+      _isMock: true,
+      _preview: {
+        leaderPhone: "+258 86 222 3344",
+        address: "Quelimane, Zambézia (sample)",
+        notes: "Need proof of address for leader.",
+      },
+    },
+  ];
+}
 
 export default function InboxPage() {
   const [role, setRole] = useState<GateRole>(getGateRole);
-  const [stage, setStage] = useState(() =>
-    getDefaultStage(getGateRole())
-  );
+  const [stage, setStage] = useState(() => getDefaultStage(getGateRole()));
+  const [sortKey, setSortKey] = useState<SortKey>("OLDEST");
 
-  /**
-   * Sync role + stage if role changes externally
-   */
+  const [useSampleData, setUseSampleData] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
   useEffect(() => {
     const interval = setInterval(() => {
       const currentRole = getGateRole();
@@ -68,58 +148,55 @@ export default function InboxPage() {
     return () => clearInterval(interval);
   }, [role]);
 
-  /**
-   * Fetch proposals
-   */
-  const {
-    data,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["/api/gate/proposals", stage],
     queryFn: () => listProposals(stage),
     enabled: isApiConfigured(),
     refetchInterval: 30_000,
   });
 
-  /**
-   * 🔐 NORMALIZATION LAYER
-   * Guarantees proposals is ALWAYS an array
-   */
-  const proposals: ProposalSummary[] = useMemo(() => {
+  const apiProposals: ProposalSummary[] = useMemo(() => {
     if (!data) return [];
 
-    // Backend might return array directly
-    if (Array.isArray(data)) return data;
+    if (Array.isArray(data)) return data as ProposalSummary[];
 
-    // Or wrapped response { items: [...] }
-    if (
-      typeof data === "object" &&
-      data !== null &&
-      Array.isArray((data as any).items)
-    ) {
-      return (data as any).items;
+    if (typeof data === "object" && data !== null && Array.isArray((data as any).items)) {
+      return (data as any).items as ProposalSummary[];
     }
 
     return [];
   }, [data]);
 
-  /**
-   * Sort by submission date (desc)
-   */
+  const proposals: UiProposal[] = useMemo(() => {
+    if (apiProposals.length > 0) return apiProposals as UiProposal[];
+    if (stage === "DOC_REVIEW" && useSampleData) return makeMockProposals();
+    return [];
+  }, [apiProposals, stage, useSampleData]);
+
   const sortedProposals = useMemo(() => {
-    return [...proposals].sort((a, b) => {
-      const dateA = a.submittedAt
-        ? new Date(a.submittedAt).getTime()
-        : 0;
-      const dateB = b.submittedAt
-        ? new Date(b.submittedAt).getTime()
-        : 0;
-      return dateB - dateA;
+    const list = [...proposals];
+
+    const dateMs = (p: UiProposal) => (p.submittedAt ? new Date(p.submittedAt).getTime() : 0);
+    const amount = (p: UiProposal) => (typeof p.totalAmount === "number" ? p.totalAmount : Number(p.totalAmount ?? 0));
+
+    list.sort((a, b) => {
+      switch (sortKey) {
+        case "NEWEST":
+          return dateMs(b) - dateMs(a);
+        case "AMOUNT_DESC":
+          return amount(b) - amount(a);
+        case "AMOUNT_ASC":
+          return amount(a) - amount(b);
+        case "OLDEST":
+        default:
+          return dateMs(a) - dateMs(b);
+      }
     });
-  }, [proposals]);
+
+    return list;
+  }, [proposals, sortKey]);
+
+  const showEmptyState = isApiConfigured() && !isLoading && !isError && sortedProposals.length === 0;
 
   return (
     <GateLayout>
@@ -127,49 +204,49 @@ export default function InboxPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold">
-              Proposal Inbox
-            </h2>
-            <p className="text-muted-foreground mt-1">
-              Review and process loan proposals
-            </p>
+            <h2 className="text-2xl font-bold" data-testid="text-inbox-title">Proposal Inbox</h2>
+            <p className="text-muted-foreground mt-1">Review and process loan proposals</p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             <Select value={stage} onValueChange={setStage}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-40" data-testid="select-stage">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {GATE_STAGES.map((s) => (
-                  <SelectItem key={s} value={s}>
+                  <SelectItem key={s} value={s} data-testid={`select-stage-${s.toLowerCase()}`}>
                     {STAGE_LABELS[s]}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => refetch()}
-              disabled={isLoading}
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${
-                  isLoading ? "animate-spin" : ""
-                }`}
-              />
+            <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+              <SelectTrigger className="w-44" data-testid="select-sort">
+                <SelectValue placeholder="Sort" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="OLDEST">Oldest first (urgent)</SelectItem>
+                <SelectItem value="NEWEST">Newest first</SelectItem>
+                <SelectItem value="AMOUNT_DESC">Amount: high to low</SelectItem>
+                <SelectItem value="AMOUNT_ASC">Amount: low to high</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isLoading} data-testid="button-refresh">
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             </Button>
           </div>
         </div>
 
         {/* API not configured */}
         {!isApiConfigured() && (
-          <Card className="border-amber-200 bg-amber-50">
+          <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
             <CardContent className="py-6 text-center">
-              API not configured. Please set
-              VITE_API_BASE_URL.
+              <p className="text-amber-800 dark:text-amber-200">
+                API not configured. Please set VITE_API_BASE_URL.
+              </p>
             </CardContent>
           </Card>
         )}
@@ -185,27 +262,40 @@ export default function InboxPage() {
 
         {/* Error */}
         {isApiConfigured() && isError && (
-          <Card className="border-red-200 bg-red-50">
-            <CardContent className="py-6 text-center text-red-700">
-              {error instanceof Error
-                ? error.message
-                : "Failed to load proposals"}
+          <Card className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
+            <CardContent className="py-6 text-center text-red-700 dark:text-red-300">
+              {error instanceof Error ? error.message : "Failed to load proposals"}
             </CardContent>
           </Card>
         )}
 
         {/* Empty */}
-        {isApiConfigured() &&
-          !isLoading &&
-          !isError &&
-          sortedProposals.length === 0 && (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                No proposals found for stage: {stage}
-              </CardContent>
-            </Card>
-          )}
+        {showEmptyState && (
+          <Card>
+            <CardContent className="py-10 text-center space-y-4">
+              <div className="flex justify-center">
+                <FileText className="h-12 w-12 text-muted-foreground" />
+              </div>
+              <div className="text-muted-foreground">
+                No proposals found for stage: <span className="font-mono">{stage}</span>
+              </div>
+
+              {stage === "DOC_REVIEW" && (
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => setUseSampleData(true)}
+                    data-testid="button-load-sample"
+                  >
+                    <Eye className="h-4 w-4" />
+                    Load sample proposals
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Table */}
         {sortedProposals.length > 0 && (
@@ -215,67 +305,112 @@ export default function InboxPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Group ID</TableHead>
-                    <TableHead>Leader</TableHead>
-                    <TableHead className="text-center">
-                      Members
-                    </TableHead>
-                    <TableHead className="text-right">
-                      Total Amount
-                    </TableHead>
+                    <TableHead>Client</TableHead>
+                    <TableHead className="text-center">Members</TableHead>
+                    <TableHead className="text-right">Contract Value</TableHead>
                     <TableHead>Submitted</TableHead>
-                    <TableHead className="text-center">
-                      Evidence
-                    </TableHead>
+                    <TableHead className="text-center">Evidence</TableHead>
                     <TableHead>Stage</TableHead>
-                    <TableHead className="text-right">
-                      Action
-                    </TableHead>
+                    <TableHead className="text-right">Review</TableHead>
                   </TableRow>
                 </TableHeader>
+
                 <TableBody>
-                  {sortedProposals.map((p) => (
-                    <TableRow key={p.proposalId}>
-                      <TableCell className="font-mono text-sm">
-                        {formatValue(p.groupId)}
-                      </TableCell>
-                      <TableCell>
-                        {formatValue(p.leaderName)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Users className="h-4 w-4" />
-                          {formatValue(p.membersCount)}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(p.totalAmount)}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatDate(p.submittedAt)}
-                      </TableCell>
-                      <TableCell className="text-center text-sm">
-                        {p.evidenceCompletedCount ?? "--"} /
-                        {p.evidenceRequiredCount ?? "--"}
-                      </TableCell>
-                      <TableCell>
-                        <StageBadge stage={p.stage} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Link
-                          href={`/gate/proposals/${p.proposalId}`}
-                        >
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="gap-1"
-                          >
-                            Open
-                            <ArrowRight className="h-4 w-4" />
-                          </Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {sortedProposals.map((p) => {
+                    const isExpanded = expandedId === p.proposalId;
+                    const isMock = Boolean((p as UiProposal)._isMock);
+
+                    return (
+                      <Fragment key={p.proposalId}>
+                        <TableRow data-testid={`row-proposal-${p.proposalId}`}>
+                          <TableCell className="font-mono text-sm">{formatValue(p.groupId)}</TableCell>
+
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <button
+                                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                                onClick={() => setExpandedId(isExpanded ? null : p.proposalId)}
+                                title="Quick view"
+                                type="button"
+                                data-testid={`button-expand-${p.proposalId}`}
+                              >
+                                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                              </button>
+
+                              <div className="flex flex-col">
+                                <span className="font-medium">{formatValue((p as any).leaderName)}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {isMock ? "Sample data" : "From Hunt"}
+                                </span>
+                              </div>
+                            </div>
+                          </TableCell>
+
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Users className="h-4 w-4" />
+                              {formatValue((p as any).membersCount)}
+                            </div>
+                          </TableCell>
+
+                          <TableCell className="text-right font-medium">
+                            {formatCurrency((p as any).totalAmount)}
+                          </TableCell>
+
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatDate((p as any).submittedAt)}
+                          </TableCell>
+
+                          <TableCell className="text-center text-sm">
+                            {(p as any).evidenceCompletedCount ?? "--"} / {(p as any).evidenceRequiredCount ?? "--"}
+                          </TableCell>
+
+                          <TableCell>
+                            <StageBadge stage={(p as any).stage} />
+                          </TableCell>
+
+                          <TableCell className="text-right">
+                            {isMock ? (
+                              <Button size="sm" variant="ghost" className="gap-1" disabled title="Sample data - not reviewable">
+                                Review
+                                <ArrowRight className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <Link href={`/gate/proposals/${p.proposalId}`}>
+                                <Button size="sm" variant="ghost" className="gap-1" data-testid={`button-review-${p.proposalId}`}>
+                                  Review
+                                  <ArrowRight className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                            )}
+                          </TableCell>
+                        </TableRow>
+
+                        {isExpanded && (
+                          <TableRow>
+                            <TableCell colSpan={8} className="bg-muted/30">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Phone</div>
+                                  <div className="font-mono">
+                                    {(p as UiProposal)._preview?.leaderPhone ?? "--"}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Address</div>
+                                  <div>{(p as UiProposal)._preview?.address ?? "--"}</div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Notes</div>
+                                  <div>{(p as UiProposal)._preview?.notes ?? "--"}</div>
+                                </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -284,8 +419,14 @@ export default function InboxPage() {
 
         {sortedProposals.length > 0 && (
           <p className="text-sm text-muted-foreground text-center">
-            Showing {sortedProposals.length} proposal
-            {sortedProposals.length !== 1 ? "s" : ""}
+            Showing {sortedProposals.length} proposal{sortedProposals.length !== 1 ? "s" : ""} - Sorted:{" "}
+            {sortKey === "OLDEST"
+              ? "Oldest first"
+              : sortKey === "NEWEST"
+                ? "Newest first"
+                : sortKey === "AMOUNT_DESC"
+                  ? "Amount high to low"
+                  : "Amount low to high"}
           </p>
         )}
       </div>
