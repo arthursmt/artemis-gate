@@ -155,16 +155,9 @@ export default function InboxPage() {
     refetchInterval: 30_000,
   });
 
+  // API layer now handles normalization - data is always an array
   const apiProposals: ProposalSummary[] = useMemo(() => {
-    if (!data) return [];
-
-    if (Array.isArray(data)) return data as ProposalSummary[];
-
-    if (typeof data === "object" && data !== null && Array.isArray((data as any).items)) {
-      return (data as any).items as ProposalSummary[];
-    }
-
-    return [];
+    return Array.isArray(data) ? data : [];
   }, [data]);
 
   const proposals: UiProposal[] = useMemo(() => {

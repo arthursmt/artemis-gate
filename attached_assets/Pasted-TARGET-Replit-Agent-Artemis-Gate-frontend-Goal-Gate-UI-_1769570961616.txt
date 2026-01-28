@@ -1,0 +1,39 @@
+TARGET: Replit Agent — Artemis Gate (frontend)
+
+Goal: Gate UI shows 0 proposals in Overview even though Arise API returns proposals (count=2) for /api/gate/proposals?stage=DOC_REVIEW. Fix the UI integration so Overview + Inbox reflect real data from Arise.
+
+Context / Evidence:
+- VITE_API_BASE_URL is set to: https://artemis-arise--arthursmt89.replit.app
+- Network request from Gate to Arise succeeds:
+  GET https://artemis-arise--arthursmt89.replit.app/api/gate/proposals?stage=DOC_REVIEW
+  Status 200
+  Response example:
+  {
+    "stage":"DOC_REVIEW",
+    "count":2,
+    "proposals":[ ... ]
+  }
+- However Gate Overview "Doc Review" card still shows 0, and Inbox list shows only sample data / not the submitted proposals.
+
+Tasks:
+1) Identify which endpoint(s) the Gate Overview cards use to compute counts (DOC_REVIEW, RISK_REVIEW, APPROVED, REJECTED).
+   - Check the data-fetching code for Overview (Home page) and Inbox page.
+   - Confirm whether Overview uses /api/gate/proposals, or a separate /api/gate/metrics|summary endpoint.
+2) Ensure Gate uses real API data (not sample/mock) whenever VITE_API_BASE_URL is configured and API health is OK.
+3) Fix any response-shape mismatch:
+   - If UI expects `items` but API returns `proposals`, map correctly.
+   - Ensure `count` is used correctly.
+4) If Overview needs a metrics endpoint and it’s missing, implement client-side aggregation:
+   - Fetch proposals per stage and compute counts.
+   - Or add a single endpoint call if already available.
+5) Add lightweight logging in the client (console.log in dev mode) to print:
+   - request URL(s)
+   - parsed response keys
+   - computed counts
+   so we can verify quickly in the browser devtools.
+
+Acceptance criteria:
+- Gate Overview cards show correct non-zero counts matching the API response.
+- Gate Inbox shows the real proposals returned by Arise (including the latest submitted proposal).
+- No "API not configured" banner when VITE_API_BASE_URL is set.
+- Works on the published Gate URL after republish.

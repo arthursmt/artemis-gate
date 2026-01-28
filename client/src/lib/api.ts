@@ -80,8 +80,45 @@ export async function checkHealth(): Promise<HealthResponse> {
   return apiFetch<HealthResponse>("/api/health");
 }
 
+interface ProposalsResponse {
+  stage?: string;
+  count?: number;
+  proposals?: ProposalSummary[];
+  items?: ProposalSummary[];
+}
+
 export async function listProposals(stage: string): Promise<ProposalSummary[]> {
-  return apiFetch<ProposalSummary[]>(`/api/gate/proposals?stage=${encodeURIComponent(stage)}`);
+  const url = `/api/gate/proposals?stage=${encodeURIComponent(stage)}`;
+  const raw = await apiFetch<ProposalSummary[] | ProposalsResponse>(url);
+  
+  // Dev logging
+  if (import.meta.env.DEV) {
+    console.log(`[Gate API] GET ${url}`);
+    console.log(`[Gate API] Response keys:`, raw && typeof raw === 'object' ? Object.keys(raw) : 'array');
+  }
+  
+  // Normalize response: API may return array directly, or { proposals: [...] }, or { items: [...] }
+  let proposals: ProposalSummary[];
+  
+  if (Array.isArray(raw)) {
+    proposals = raw;
+  } else if (raw && typeof raw === 'object') {
+    if (Array.isArray(raw.proposals)) {
+      proposals = raw.proposals;
+    } else if (Array.isArray(raw.items)) {
+      proposals = raw.items;
+    } else {
+      proposals = [];
+    }
+  } else {
+    proposals = [];
+  }
+  
+  if (import.meta.env.DEV) {
+    console.log(`[Gate API] Parsed ${proposals.length} proposals for stage=${stage}`);
+  }
+  
+  return proposals;
 }
 
 export async function getProposal(proposalId: string): Promise<ProposalDetail> {
